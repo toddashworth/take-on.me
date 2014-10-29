@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Based on the "sobel derivatives" sample code from jsfeat: https://github.com/inspirit/jsfeat/ -->
+<html style="width:100%; height:100%">
+  <head>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+    <script type="text/javascript" src='compatibility.js'></script>
+    <script type="text/javascript" src='jsfeat-min.js'></script>
+    <script>
+        $(window).load(function() {
+            "use strict";
+
+            // lets do some fun
+            var video = document.getElementById('webcam');
+            var canvas = document.getElementById('canvas');
+            try {
+                var attempts = 0;
+                var readyListener = function(event) {
+                    findVideoSize();
+                };
+                var findVideoSize = function() {
+                    if(video.videoWidth > 0 && video.videoHeight > 0) {
+                        video.removeEventListener('loadeddata', readyListener);
+                        onDimensionsReady(video.videoWidth, video.videoHeight);
+                    } else {
+                        if(attempts < 10) {
+                            attempts++;
+                            setTimeout(findVideoSize, 200);
+                        } else {
+                            onDimensionsReady(640, 480);
+                        }
+                    }
+                };
+                var onDimensionsReady = function(width, height) {
+                    demo_app(width, height);
+                    compatibility.requestAnimationFrame(tick);
+                };
+
+                video.addEventListener('loadeddata', readyListener);
+
+                compatibility.getUserMedia({video: true}, function(stream) {
+                    try {
+                        video.src = compatibility.URL.createObjectURL(stream);
+                    } catch (error) {
+                        video.src = stream;
+                    }
+                    setTimeout(function() {
+                            video.play();
+                        }, 500);
+                }, function (error) {
+                    $('#canvas').hide();
+                    $('#log').hide();
+                    $('#no_rtc').html('<h4>WebRTC not available.</h4>');
+                    $('#no_rtc').show();
+                });
+            } catch (error) {
+                $('#canvas').hide();
+                $('#log').hide();
+                $('#no_rtc').html('<h4>Something goes wrong...</h4>');
+                $('#no_rtc').show();
+            }
+
+            var ctx,canvasWidth,canvasHeight;
+            var img_u8,img2_u8,img_gxgy;
+
+            function demo_app(videoWidth, videoHeight) {
+                canvasWidth  = canvas.width;
+                canvasHeight = canvas.height;
+                ctx = canvas.getContext('2d');
+
+                ctx.fillStyle = "rgb(0,255,0)";
+                ctx.strokeStyle = "rgb(0,255,0)";
+
+                img_u8 = new jsfeat.matrix_t(640, 480, jsfeat.U8C1_t);
+                //img2_u8 = new ssfeat.matrix_t(640, 480, jsfeat.U8C1_t);
+                img_gxgy = new jsfeat.matrix_t(640, 480, jsfeat.S32C2_t);
+            }
+
+            function tick() {
+                compatibility.requestAnimationFrame(tick);
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    ctx.drawImage(video, 0, 0, 640, 480);
+                    var imageData = ctx.getImageData(0, 0, 640, 480);
+
+                    jsfeat.imgproc.grayscale(imageData.data, 640, 480, img_u8);
+                    //jsfeat.imgproc.equalize_histogram(img_u8, img2_u8);
+                    jsfeat.imgproc.sobel_derivatives(img_u8, img_gxgy);
+
+                    // render result back to canvas
+                    var data_u32 = new Uint32Array(imageData.data.buffer);
+                    var alpha = (0xff << 24);
+                    var i = img_u8.cols*img_u8.rows, pix=0, gx = 0, gy = 0;
+                    while(--i >= 0) {
+                        gx = Math.abs(img_gxgy.data[i<<1]>>2)&0xff;
+                        gy = Math.abs(img_gxgy.data[(i<<1)+1]>>2)&0xff;
+                        pix = ((gx + gy)>>1)&0xff;
+                        data_u32[i] = (pix << 24) | (gx << 16) | (0 << 8) | gy;
+                    }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                }
+            }
+
+            $(window).unload(function() {
+                video.pause();
+                video.src=null;
+            });
+        });
+    </script>
+  </head>
+  <body style="display: flex; flex-direction: column; width: 100%; height: 100%; margin:0">
+    <video id="webcam" width="640" height="480" style="display:none;"></video>
+    <div style="flex: 1; display: flex;">
+      <div style="height:100%; margin: 0 auto">
+        <canvas id="canvas" width="640" height="480" style="height:100%; transform: scale(-1, 1)"></canvas>
+      </div>
+    </div>
+    <iframe style="height:128px;" width="100%" height="128" scrolling="no" frameborder="no" src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/15427522&amp;color=ff5500&amp;auto_play=true&amp;hide_related=false&amp;show_comments=false&amp;show_user=false&amp;show_reposts=false&amp;loop=true"></iframe>
+  </body>
+</html>
